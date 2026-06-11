@@ -61,4 +61,23 @@ public class GlobalExceptionHandler {
                 "message", ex.getMessage()
         ));
     }
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<?> handleForbidden(ForbiddenException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 403,
+                "error", "Forbidden",
+                "message", ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(InsufficientBalanceException.class)
+    public ResponseEntity<?> handleInsufficientBalance(InsufficientBalanceException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 409,
+                "error", "Conflict",
+                "message", ex.getMessage()
+        ));
+    }
 }
