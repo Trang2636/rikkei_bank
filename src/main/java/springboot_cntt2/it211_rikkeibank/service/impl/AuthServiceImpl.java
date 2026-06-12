@@ -1,5 +1,6 @@
 package springboot_cntt2.it211_rikkeibank.service.impl;
-
+import springboot_cntt2.it211_rikkeibank.service.TokenBlacklistService;
+import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -42,6 +43,7 @@ import java.time.*;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
+    private final TokenBlacklistService tokenBlacklistService;
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
@@ -144,21 +146,38 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void logout(String accessToken, LogoutRequest request) {
+
+        /*
+         * accessToken lấy từ header:
+         * Authorization: Bearer <token>
+         */
         if (accessToken != null && accessToken.startsWith("Bearer ")) {
+
+            // Cắt bỏ chữ "Bearer " để lấy token thật
             String token = accessToken.substring(7);
 
+            // Lấy thời gian hết hạn của access token
             Date expiryDate = jwtService.extractExpiration(token);
 
-            tokenBlacklistRepository.save(TokenBlacklist.builder()
-                    .accessToken(token)
-                    .expiryAt(expiryDate.toInstant()
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDateTime())
-                    .blacklistedAt(LocalDateTime.now())
-                    .createdAt(LocalDateTime.now())
-                    .build());
+            /*
+             * Tính thời gian sống còn lại của token.
+             * Ví dụ token còn 3 phút thì Redis chỉ lưu blacklist trong 3 phút.
+             */
+            long ttlMillis = expiryDate.getTime() - System.currentTimeMillis();
+
+            /*
+             * Nếu token vẫn còn hạn thì mới cần đưa vào blacklist.
+             * Nếu token hết hạn rồi thì không cần lưu nữa.
+             */
+            if (ttlMillis > 0) {
+                tokenBlacklistService.blacklist(token, Duration.ofMillis(ttlMillis));
+            }
         }
 
+        /*
+         * Refresh token cũng bị revoke để user không thể dùng nó
+         * xin access token mới sau khi logout.
+         */
         if (request.getRefreshToken() != null && !request.getRefreshToken().isBlank()) {
             refreshTokenRepository.findByToken(request.getRefreshToken())
                     .ifPresent(refreshToken -> {
